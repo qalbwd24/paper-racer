@@ -1,0 +1,35 @@
+// Controller integration test with a minimal DOM, not a browser visual test.
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+class Element{constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this.dataset={};this.attrs={};this.events={};this.style={};this.value='';this.checked=false;this.disabled=false;this.textContent='';this.classList={add(){},remove(){},toggle(){}};}append(...children){for(const c of children)c.parent=this;this.children.push(...children);}replaceChildren(...c){this.children=[];this.append(...c);}setAttribute(k,v){this.attrs[k]=v;}addEventListener(k,fn){(this.events[k]??=[]).push(fn);}getAttribute(k){return this.attrs[k];}querySelectorAll(s){return s==='[data-search-overlay]'?this.children.filter(c=>c.attrs?.['data-search-overlay']):[];}remove(){if(this.parent)this.parent.children=this.parent.children.filter(c=>c!==this);}createSVGPoint(){return {x:0,y:0,matrixTransform(){return this;}};}getScreenCTM(){return {inverse(){return {};}};}}
+const elements=new Map(),registered=new Map(),storage=new Map();const get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
+for(const m of fs.readFileSync('dist/index.html','utf8').matchAll(/id="([^"]+)"/g))get(m[1]);get('aiScope').value='all';get('aiPath').checked=true;get('warnings').checked=true;get('width').value='6';
+const document={getElementById:get,createElementNS:(ns,tag)=>new Element(tag),createElement:tag=>new Element(tag),querySelectorAll:()=>get('movePad').children,addEventListener(){},activeElement:{tagName:'BODY'},modelContext:{registerTool(t){registered.set(t.name,t);}}};
+const context=vm.createContext({console,document,structuredClone,AbortController,localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)},setTimeout,clearTimeout,window:{addEventListener(){}},URL,Blob});
+get('searchVisible').checked=true;
+for(const f of ['rules.js','game.js','continuous.js','continuous-solver.js','ai.js','search-view.js'])vm.runInContext(fs.readFileSync('dist/'+f,'utf8'),context,{filename:f});
+// Use the same planner module in the host realm: vm's uncached global Math access
+// makes numerical loops artificially slow and is unrelated to browser performance.
+context.ContinuousSolver=require('./dist/continuous-solver.js');
+const run=s=>vm.runInContext(s,context),call=(n,i)=>registered.get(n).execute(i);
+(async()=>{
+assert.equal(registered.size,8);const initial=await call('read_race',{});assert.equal(initial.turns,0);
+await assert.rejects(()=>call('solve_continuous_race',{scope:'selected'}));assert.equal((await call('read_race',{})).state,null);
+const solved=await call('solve_continuous_race',{scope:'all'});assert.equal(solved.status,'approximate');assert.ok(solved.turns>0);assert.equal((await call('read_race',{})).state,null);console.log('PASS computing does not replace human race');
+assert.equal(run('searchFrames.length'),solved.turns);assert.ok(get('board').querySelectorAll('[data-search-overlay]').length===1);run('render();render()');assert.equal(get('board').querySelectorAll('[data-search-overlay]').length,1);
+get('searchReplay').onclick();assert.equal(run('searchPlaying'),true);run('searchTick()');get('searchReplay').onclick();assert.equal(run('searchPlaying'),false);get('searchFrame').value=0;get('searchFrame').oninput();assert.equal(run('searchSelected.depth'),1);assert.equal((await call('read_race',{})).state,null);get('searchVisible').checked=false;get('searchVisible').onchange();assert.equal(get('board').querySelectorAll('[data-search-overlay]').length,0);get('searchVisible').checked=true;console.log('PASS real search frames, one overlay, replay, scrub and display toggle');
+await call('choose_continuous_start',{fraction:0.5123});run('practice=true');await call('play_race_moves',{moves:[{ax:0,ay:-1}]});assert.equal((await call('read_continuous_race',{})).frame,1);console.log('PASS ghost advances with human');
+const scoped=await call('solve_continuous_race',{scope:'selected'});assert.ok(scoped.turns>0);assert.equal(scoped.frame,1);assert.equal((await call('read_race',{})).turns,1);
+await call('play_continuous_race',{action:'play'});assert.equal((await call('read_continuous_race',{})).playing,true);run('aiAdvance()');await call('play_continuous_race',{action:'pause'});assert.equal((await call('read_continuous_race',{})).playing,false);console.log('PASS playback and pause');
+run('undo()');assert.equal((await call('read_continuous_race',{})).frame,0);run('reset()');assert.equal((await call('read_continuous_race',{})).status,'idle');console.log('PASS undo/restart clear selected-start ghost correctly');
+await call('solve_continuous_race',{scope:'all'});const snapshot=JSON.stringify(await call('read_continuous_race',{}));assert.throws(()=>call('play_continuous_race',{action:'invalid'}));assert.equal(JSON.stringify(await call('read_continuous_race',{})),snapshot);console.log('PASS invalid action preserves state');
+await call('play_continuous_race',{action:'play'});for(let i=0;i<80;i++)run('aiAdvance()');assert.equal((await call('read_continuous_race',{})).frame,solved.turns);assert.equal((await call('read_continuous_race',{})).playing,false);assert.equal(storage.size,0);console.log('PASS ghost finish does not write personal record');
+const pending=call('solve_continuous_race',{scope:'all'});await call('start_race',{track:'rookie',startIndex:0,practice:true});await pending;assert.equal((await call('read_continuous_race',{})).status,'idle');assert.equal((await call('read_race',{})).track,'练习场');console.log('PASS changing track invalidates in-flight result');
+assert.match(get('aiStatus').textContent,/连续选择/);assert.equal(run('searchFrames.length'),0);assert.equal(run('searchPlaying'),false);run('aiInvalidate()');
+// Drive the real board event handlers, including projection relative to a moving circle.
+run("track=R.makeTrack({name:'straight',width:6,points:[R.P(5,16),R.P(35,16)]});chooseStart(R.P(5,16));practice=true");
+const clickWorld=(x,y,type='click')=>{for(const fn of get('board').events[type]??[])fn({clientX:36+24*x,clientY:36+24*y,target:get('board')});};
+clickWorld(25,16,'pointermove');assert.equal(run('circleAim.ax'),1);assert.equal(run('circleAim.ay'),0);clickWorld(25,16);assert.equal(run('state.position.x'),6);assert.equal(run('state.velocity.x'),1);
+clickWorld(10,20,'pointermove');assert.ok(Math.abs(run('circleAim.ax')-.6)<1e-10);assert.ok(Math.abs(run('circleAim.ay')-.8)<1e-10);clickWorld(10,20);assert.ok(Math.abs(run('state.position.x')-7.6)<1e-10);assert.ok(Math.abs(run('state.position.y')-16.8)<1e-10);
+run('circleBoardAim({x:state.position.x+state.velocity.x,y:state.position.y+state.velocity.y})');assert.equal(run('circleAim.ax'),0);assert.equal(run('circleAim.ay'),0);run('circleSetAim(.2,.3)');assert.equal(run('circleAim.ax'),.2);assert.equal(run('circleAim.ay'),.3);run('aiInvalidate()');console.log('PASS outside hover/click projects from inertial center, inside and center stay free');console.log('ALL CONTROLLER CHECKS PASSED');
+})().catch(e=>{console.error(e);run('aiInvalidate()');process.exitCode=1;});
+

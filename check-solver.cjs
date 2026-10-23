@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),R=require('./dist/rules.js'),S=require('./dist/solver.js'),fs=require('node:fs');
+function replay(t,r){assert.equal(r.status,'optimal');assert.equal(r.moves.length,r.turns);let s={position:r.start,velocity:R.P(0,0)};for(let i=0;i<r.moves.length;i++){s=R.evaluate(t,s,r.moves[i].ax,r.moves[i].ay);assert.equal(s.status,i===r.moves.length-1?'finished':'running');assert.deepEqual(s.position,r.states[i+1].position);}return s;}
+// Small independent exhaustive path enumerator: no caching and no visited-state pruning.
+function brute(t){let frontier=t.starts.map(position=>({position,velocity:R.P(0,0)}));for(let depth=1;depth<=6;depth++){const next=[];for(const s of frontier)for(let ax=-1;ax<=1;ax++)for(let ay=-1;ay<=1;ay++){const o=R.evaluate(t,s,ax,ay);if(o.status==='finished')return depth;if(o.status==='running')next.push(o);}frontier=next;}throw Error('oracle depth exceeded');}
+(async()=>{
+const summary={};for(const [name,spec]of Object.entries(R.presets)){const t=R.makeTrack(spec),begin=Date.now(),r=await S.solve(t);replay(t,r);assert.equal(r.turns,{bay:15,rookie:15,snake:16}[name]);summary[name]={turns:r.turns,expanded:r.expanded,elapsedMs:Date.now()-begin,start:r.start,moves:r.moves};console.log('PASS exact preset + replay',name,r.turns);}
+for(const width of [3,6]){const t=R.makeTrack({name:'oracle',width,points:[R.P(5,16),R.P(14,16)]}),r=await S.solve(t);assert.equal(r.turns,4);assert.equal(r.turns,brute(t));replay(t,r);console.log('PASS independent exhaustive oracle',width);}
+const t=R.makeTrack(R.presets.bay),all=await S.solve(t),individual=[];for(const p of t.starts){const r=await S.solve(t,{starts:[p]});replay(t,r);assert.deepEqual(r.start,p);individual.push(r.turns);}assert.equal(all.turns,Math.min(...individual));console.log('PASS all starts minimum equals per-start searches',individual);
+assert.equal((await S.solve(t,{maxStates:1})).status,'limit');const c=new AbortController();c.abort();assert.equal((await S.solve(t,{signal:c.signal})).status,'cancelled');console.log('PASS resource limit and pre-cancel do not claim optimality');
+const live=new AbortController();let ticks=0;const r=await S.solve(t,{signal:live.signal,yieldMs:0,onProgress:()=>{ticks++;live.abort();}});assert.equal(r.status,'cancelled');assert.ok(ticks);console.log('PASS cancellation during progress');
+await assert.rejects(()=>S.solve(t,{starts:[R.P(0,0)]}));console.log('PASS invalid start rejected');
+fs.writeFileSync('checks/optimal-routes.json',JSON.stringify(summary,null,2));console.log('ALL SOLVER CHECKS PASSED');
+})().catch(e=>{console.error(e);process.exitCode=1;});

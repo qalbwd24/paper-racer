@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>纸上赛车 V2 · 连续驾驶</title>
+  <meta name="description" content="无网格连续赛车：在半径一单位的圆内自由选点，掌握惯性。可离线游玩。">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="rules.js"></script><script defer src="game.js"></script><script defer src="continuous.js"></script><script defer src="continuous-solver.js"></script><script defer src="ai.js"></script><script defer src="search-view.js"></script>
+</head>
+<body>
+<header><div class="brand"><span class="brand-mark">↗</span><div><h1>纸上赛车</h1><span class="sub">PAPER RACER / V2 连续驾驶</span></div></div><div class="header-actions"><button id="help">玩法说明</button><span class="version">V2 · 半径 1</span></div></header>
+<main>
+  <section class="play-area" aria-label="赛车棋盘">
+    <div class="board-top"><div><span class="eyebrow">当前赛道</span><h2 id="trackTitle">河湾</h2></div><div class="board-tags"><span id="modeTag">单人挑战</span><span>自由选点 · 半径 1</span></div></div>
+    <div class="board-wrap"><svg id="board" viewBox="0 0 1200 840" aria-label="连续赛车赛道，点击起跑线发车，在蓝色圆内选点" role="group"></svg></div>
+    <div class="board-bottom"><div class="legend"><span><i class="dot orange"></i>你的车</span><span><i class="dot blue"></i>落点圆盘</span><span><i class="dash"></i>惯性延长线</span></div><span id="boardNote">起点 → 终点 · 开放赛道</span></div>
+    <section class="search-view" aria-label="人机搜索过程">
+      <div class="search-heading"><h3>看看人机怎么找路</h3><label class="toggle"><input id="searchVisible" type="checkbox" checked><span>显示搜索过程</span></label></div>
+      <p id="searchStatus" role="status">点击“计算人机路线”，观察它逐回合尝试、筛选路线。</p>
+      <div class="search-legend"><span style="color:#6a80b8">蓝灰线：尝试片段</span><span style="color:#c7524a">红线：撞墙淘汰</span><span style="color:#8b4bc2">紫线：当前优先路线</span></div>
+      <div class="search-controls"><button id="searchReplay" disabled>回放搜索</button><label for="searchFrame">搜索回合</label><input id="searchFrame" type="range" min="0" max="0" value="0" disabled><label class="toggle"><input id="searchSlow" type="checkbox"><span>慢速计算演示</span></label></div>
+      <p class="small">显示真实搜索片段的抽样（最近 160 段），紫线会随筛选改变。每回合圆内采样 49 种调整，最多保留 3000 个状态；不保证全局最优。计算完可拖动回看。</p>
+    </section>
+  </section>
+  <aside>
+    <section class="status-panel"><span class="eyebrow" id="phase">准备发车</span><h2 id="statusTitle" aria-live="polite">选择你的起点</h2><p id="statusText">点击绿色起跑线上的任意圆点。</p><div class="stats"><div><span>回合</span><strong id="turns">00</strong></div><div><span>速度 / 单位每回合</span><strong id="speed">0.0</strong></div></div><div class="velocity"><span>上一步位移</span><b id="velocity">尚未移动</b></div></section>
+    <section class="control-panel"><div class="section-heading"><h3>下一步</h3><span id="moveCaption">等待发车</span></div><div id="movePad" hidden></div><svg id="aimPad" viewBox="0 0 200 200" aria-label="放大的速度调整圆盘，点击圆内选点"><circle cx="100" cy="100" r="76" fill="#eff5ff" stroke="#3165dd" stroke-width="2"/><path d="M24 100H176M100 24V176" stroke="#aac0e6" stroke-dasharray="4 4"/><circle id="aimMarker" cx="100" cy="100" r="5" fill="#3165dd"/><text x="100" y="14" text-anchor="middle" font-size="12" fill="#61758d">上</text><text x="100" y="196" text-anchor="middle" font-size="12" fill="#61758d">下</text></svg><p id="aimValue" class="pad-note">半径 1 · 圆内任意位置</p><div class="actions"><button id="keepSpeed">保持速度</button><button id="aimConfirm">确认当前选点</button></div><p class="pad-note">圆盘与赛道蓝圆对应。圆心保持速度；到圆心的距离是速度调整量。</p><label class="toggle"><input type="checkbox" id="warnings" checked><span>显示撞墙风险</span></label><div class="actions"><button id="restart" class="primary">重新发车</button><button id="undo" disabled>撤销一步</button></div><p class="small" id="record">个人最佳：—</p></section>
+    <section class="ai-panel"><h3>连续人机 <span class="ai-badge">幽灵车</span></h3><label class="sr-only" for="aiScope">人机发车范围</label><select id="aiScope"><option value="all">采样起点 · 近似搜索</option><option value="selected">我的起点 · 近似搜索</option></select><div class="actions"><button id="aiSolve" class="primary">计算人机路线</button><button id="aiPlay" disabled>播放人机</button></div><p id="aiStatus" aria-live="polite">人机采样搜索可行路线，不保证最少回合。</p><label class="toggle"><input id="aiPath" type="checkbox" checked><span>显示人机路线</span></label><p class="small">绿色方块是人机。你每走一步，它也前进一步；可单独播放演示。人机成绩不计入个人纪录。</p></section>
+    <section class="track-panel"><h3>换一条路试试</h3><label class="sr-only" for="trackSelect">选择赛道</label><select id="trackSelect"><option value="bay">河湾 · 连续弯道</option><option value="rookie">练习场 · 宽阔 U 弯</option><option value="snake">折返 · 紧凑 S 弯</option></select><button id="edit" class="wide">＋ 自己画赛道</button><div id="editor" hidden><p>点击连接路线，或按住鼠标画线。两侧边界会自动生成。</p><label class="width-label" for="width">道路宽度 <output id="widthValue">6 单位</output></label><input type="range" min="3" max="9" step="1" value="6" id="width"><div class="actions"><button id="removeNode">撤销画线</button><button id="clearDraft">清空画布</button></div><div class="actions"><button id="applyTrack" class="primary">开始试跑</button><button id="cancelEdit">取消</button></div><p id="editorMessage" aria-live="polite"></p></div><div class="file-actions"><button id="export">导出赛道</button><button id="import">导入赛道</button><input hidden type="file" id="fileInput" accept=".json,application/json"></div></section>
+  </aside>
+</main>
+<footer><span>慢一点入弯，快一点出弯。</span><span>连续选择，一条自己的路线。</span></footer>
+<dialog id="helpDialog"><form method="dialog"><button class="dialog-close" aria-label="关闭说明">×</button><span class="eyebrow">驾驶手册</span><h2>先想好下一步，再加速。</h2><ol><li>在绿色起点线任意选择一个位置，初始速度为零。</li><li>每回合将上一步位移原样延伸，以延伸终点为圆心，在半径 1 的圆内任选下一落点。圆心表示保持速度，不是停车。</li><li>移动途中碰到墙、擦角或离开起点后方，都算失败。橙色车标按一个无体积的点判定，途中碰墙也会失败。</li><li>从正确方向越过紫色终点线就完成。以完整回合数计分，不限制思考时间。</li><li>可以停车、倒退。历史轨迹不阻挡你。撤销后转为练习，本局不更新最佳成绩。</li></ol><p>蓝色圆盘是下一落点的可选范围。鼠标悬停可预览路线，红色预览表示会撞墙。圈外点击自动选择从圆心朝鼠标方向的圆周交点。右侧操纵圆盘提供放大选点。小键盘方向键按单位长度调整速度，5 保持速度；R 重开，Ctrl+Z 撤销。</p><button class="primary wide">开始驾驶</button></form></dialog>
+<div id="toast" role="status" hidden></div>
+</body></html>
+
+
+

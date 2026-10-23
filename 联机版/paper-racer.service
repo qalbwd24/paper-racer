@@ -1,0 +1,25 @@
+﻿[Unit]
+Description=Paper Racer V1 and V2 multiplayer
+After=network.target
+
+[Service]
+Type=simple
+User=paper-racer
+Group=paper-racer
+WorkingDirectory=/opt/paper-racer/current/online
+ExecStart=/usr/bin/node /opt/paper-racer/current/online/server.cjs
+Environment=HOST=127.0.0.1
+Environment=PORT=3211
+Environment=PUBLIC_ORIGIN=https://example.com
+Environment=TRUST_PROXY=1
+Environment=DATA_FILE=/var/lib/paper-racer/rooms.json
+StateDirectory=paper-racer
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

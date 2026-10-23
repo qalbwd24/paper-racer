@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>纸上赛车 · 单人试跑</title>
+  <meta name="description" content="在方格纸上规划路线，掌握惯性，用更少的回合跑到终点。可离线游玩。">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="rules.js"></script><script defer src="game.js"></script><script defer src="solver.js"></script><script defer src="ai.js"></script>
+</head>
+<body>
+<header><div class="brand"><span class="brand-mark">↗</span><div><h1>纸上赛车</h1><span class="sub">PAPER RACER / 单人试跑</span></div></div><div class="header-actions"><button id="help">玩法说明</button><span class="version">独立原型 · 01</span></div></header>
+<main>
+  <section class="play-area" aria-label="赛车棋盘">
+    <div class="board-top"><div><span class="eyebrow">当前赛道</span><h2 id="trackTitle">河湾</h2></div><div class="board-tags"><span id="modeTag">单人挑战</span><span>每格 1 单位</span></div></div>
+    <div class="board-wrap"><svg id="board" viewBox="0 0 1200 840" aria-label="方格赛车赛道，点击绿色起点后选择下一步" role="group"></svg></div>
+    <div class="board-bottom"><div class="legend"><span><i class="dot orange"></i>你的车</span><span><i class="dot blue"></i>候选落点</span><span><i class="dash"></i>惯性延长线</span></div><span id="boardNote">起点 → 终点 · 开放赛道</span></div>
+  </section>
+  <aside>
+    <section class="status-panel"><span class="eyebrow" id="phase">准备发车</span><h2 id="statusTitle" aria-live="polite">选择你的起点</h2><p id="statusText">点击绿色起跑线上的任意圆点。</p><div class="stats"><div><span>回合</span><strong id="turns">00</strong></div><div><span>速度 / 格每回合</span><strong id="speed">0.0</strong></div></div><div class="velocity"><span>上一步位移</span><b id="velocity">尚未移动</b></div></section>
+    <section class="control-panel"><div class="section-heading"><h3>下一步</h3><span id="moveCaption">等待发车</span></div><div id="movePad" class="move-pad" aria-label="九宫格加速度选择"></div><p class="pad-note">中心键保持速度；周围八键调整速度。<br>也可以直接点击赛道上的候选点。</p><label class="toggle"><input type="checkbox" id="warnings" checked><span>显示撞墙风险</span></label><div class="actions"><button id="restart" class="primary">重新发车</button><button id="undo" disabled>撤销一步</button></div><p class="small" id="record">本赛道最佳：—</p></section>
+    <section class="ai-panel"><h3>最优人机 <span class="ai-badge">幽灵车</span></h3><label class="sr-only" for="aiScope">人机发车范围</label><select id="aiScope"><option value="all">所有起点 · 全局最佳</option><option value="selected">我的起点 · 同点比较</option></select><div class="actions"><button id="aiSolve" class="primary">计算最佳路线</button><button id="aiPlay" disabled>播放人机</button></div><p id="aiStatus" aria-live="polite">最佳指最少回合数；默认同时比较所有发车点。</p><label class="toggle"><input id="aiPath" type="checkbox" checked><span>显示最佳路线</span></label><p class="small">绿色方块是人机。你每走一步，它也前进一步；可单独播放演示。人机成绩不计入个人纪录。</p></section>
+    <section class="track-panel"><h3>换一条路试试</h3><label class="sr-only" for="trackSelect">选择赛道</label><select id="trackSelect"><option value="bay">河湾 · 连续弯道</option><option value="rookie">练习场 · 宽阔 U 弯</option><option value="snake">折返 · 紧凑 S 弯</option></select><button id="edit" class="wide">＋ 自己画赛道</button><div id="editor" hidden><p>点击连接路线，或按住鼠标画线。两侧边界会自动生成。</p><label class="width-label" for="width">道路宽度 <output id="widthValue">6 格</output></label><input type="range" min="3" max="9" step="1" value="6" id="width"><div class="actions"><button id="removeNode">撤销画线</button><button id="clearDraft">清空画布</button></div><div class="actions"><button id="applyTrack" class="primary">开始试跑</button><button id="cancelEdit">取消</button></div><p id="editorMessage" aria-live="polite"></p></div><div class="file-actions"><button id="export">导出赛道</button><button id="import">导入赛道</button><input hidden type="file" id="fileInput" accept=".json,application/json"></div></section>
+  </aside>
+</main>
+<footer><span>慢一点入弯，快一点出弯。</span><span>九种选择，一条自己的路线。</span></footer>
+<dialog id="helpDialog"><form method="dialog"><button class="dialog-close" aria-label="关闭说明">×</button><span class="eyebrow">驾驶手册</span><h2>先想好下一步，再加速。</h2><ol><li>在绿色起点线选择一个格点，初始速度为零。</li><li>每回合将上一步的方向和距离原样延伸，以延伸终点为中心九选一。中心表示维持速度，不是停车。</li><li>移动途中碰到墙、擦角或离开起点后方，都算失败。橙色车标按一个无体积的点判定。</li><li>从正确方向越过紫色终点线就完成。以完整回合数计分，不限制思考时间。</li><li>可以停车、倒退。历史轨迹不阻挡你。撤销后转为练习，本局不更新最佳成绩。</li></ol><p>蓝点是候选落点，红色叉号是会撞墙的选择。风险提示可关闭；红色选择仍可执行。数字小键盘 1–9 对应九宫格，5 保持速度；R 重开，Ctrl+Z 撤销。</p><button class="primary wide">开始驾驶</button></form></dialog>
+<div id="toast" role="status" hidden></div>
+</body></html>
